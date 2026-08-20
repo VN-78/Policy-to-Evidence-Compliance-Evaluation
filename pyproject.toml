@@ -29,7 +29,7 @@ package = false
 [tool.ruff]
 # Enable Pyflakes (F), pycodestyle (E), and isort (I)
 lint.select = ["E", "F", "I"]
-line-length = 88
+line-length = 120
 
 [tool.ruff.lint.isort]
 # Forces Ruff to group your imports exactly like the diagram above
