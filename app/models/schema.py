@@ -11,14 +11,14 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 
 class ComparisonOperator(str, Enum):
-    LT = "<"
-    LTE = "<="
-    GT = ">"
-    GTE = ">="
-    EQ = "=="
-    NEQ = "!="
-    IN = "in"
-    NOT_IN = "not_in"
+    LT = "<"  #LT: Less Than (<)
+    LTE = "<=" #LTE: Less Than or Equal (<=)
+    GT = ">" #GT: Greater Than (>)
+    GTE = ">=" #GTE: Greater Than or Equal (>=)
+    EQ = "==" #EQ: Equal (==)
+    NEQ = "!=" #NEQ: Not Equal (!=)
+    IN = "in" # Exists inside a list/string.
+    NOT_IN = "not_in" #
 
 
 class ComplianceStatus(str, Enum):
