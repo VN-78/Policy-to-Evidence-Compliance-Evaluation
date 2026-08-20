@@ -28,6 +28,25 @@ class ComplianceStatus(str, Enum):
     UNKNOWN = "Unknown"
 
 
+class PreCondition(BaseModel):
+    """Evaluated first. If true, the main rule applies. If false, the rule is skipped."""
+
+    target_metric: str = Field(
+        ...,
+        description="The metric to check before applying the main rule",
+        examples=["is_publicly_accessible"]
+    )
+    operator: ComparisonOperator = Field(
+        ...,
+        description="The operator for the pre-condition",
+        examples=[ComparisonOperator.EQ]
+    )
+    threshold_value: JsonValue = Field(
+        ...,
+        description="The value that triggers the main rule",
+        examples=[True]
+    )
+
 # =====================================================================
 # 2. Policy & LLM Extraction Schemas
 # =====================================================================
@@ -76,6 +95,10 @@ class ExtractedRuleBase(BaseModel):
     page_number: int | None = Field(
         default=1,
         description="Document page where this clause is located",
+    )
+    pre_condition: PreCondition | None = Field(
+            default=None,
+            description="Optional condition that must be true for this rule to apply."
     )
 
     # FIXED: ClassVar tells Pyright this is a class attribute, not an instance attribute
