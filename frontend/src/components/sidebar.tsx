@@ -1,24 +1,19 @@
 import {
   FileText,
   Cpu,
-  LayoutDashboard,
-  History,
   HelpCircle,
-  Plus,
   ShieldCheck,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-export type NavTab = "policies" | "scans" | "dashboard" | "audit-log"
+export type NavTab = "policies" | "scans"
 
 interface SidebarProps {
   currentTab: NavTab
   onSelectTab: (tab: NavTab) => void
-  onNewPolicyClick: () => void
 }
 
-export function Sidebar({ currentTab, onSelectTab, onNewPolicyClick }: SidebarProps) {
+export function Sidebar({ currentTab, onSelectTab }: SidebarProps) {
   const navItems = [
     {
       id: "policies" as NavTab,
@@ -32,22 +27,12 @@ export function Sidebar({ currentTab, onSelectTab, onNewPolicyClick }: SidebarPr
       icon: Cpu,
       badge: "Step 2",
     },
-    {
-      id: "dashboard" as NavTab,
-      label: "Overview Dashboard",
-      icon: LayoutDashboard,
-    },
-    {
-      id: "audit-log" as NavTab,
-      label: "Audit Logs",
-      icon: History,
-    },
   ]
 
   return (
     <aside className="fixed left-0 top-0 z-30 hidden h-screen w-64 flex-col border-r border-border/80 bg-card p-4 transition-colors lg:flex">
       {/* Brand Header */}
-      <div className="mb-6 flex items-center gap-3 px-2">
+      <div className="mb-8 flex items-center gap-3 px-2">
         <div className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm shadow-primary/20">
           <ShieldCheck className="size-5" />
         </div>
@@ -61,17 +46,11 @@ export function Sidebar({ currentTab, onSelectTab, onNewPolicyClick }: SidebarPr
         </div>
       </div>
 
-      {/* Quick Action CTA */}
-      <Button
-        onClick={onNewPolicyClick}
-        className="mb-6 w-full gap-2 rounded-xl text-xs font-semibold shadow-sm"
-      >
-        <Plus className="size-4" />
-        New Policy Ingestion
-      </Button>
-
       {/* Main Navigation List */}
-      <nav className="flex-1 space-y-1">
+      <nav className="flex-1 space-y-1.5">
+        <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Audit Workflow
+        </div>
         {navItems.map((item) => {
           const Icon = item.icon
           const isActive = currentTab === item.id
@@ -82,7 +61,7 @@ export function Sidebar({ currentTab, onSelectTab, onNewPolicyClick }: SidebarPr
               type="button"
               onClick={() => onSelectTab(item.id)}
               className={cn(
-                "flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-medium transition-all text-left select-none",
+                "flex w-full items-center justify-between rounded-xl px-3 py-3 text-xs font-medium transition-all text-left select-none",
                 isActive
                   ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -115,7 +94,7 @@ export function Sidebar({ currentTab, onSelectTab, onNewPolicyClick }: SidebarPr
           href="https://policy-to-evidence-compliance-evaluation.onrender.com/docs"
           target="_blank"
           rel="noreferrer"
-          className="flex items-center gap-3 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
         >
           <HelpCircle className="size-4 shrink-0" />
           <span>API Swagger Docs</span>
