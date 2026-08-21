@@ -21,6 +21,10 @@ class Settings(BaseSettings):
         default="gemini",
         description="Active LLM provider backend ('gemini' or 'openrouter')",
     )
+    database_url: str = Field(
+        default="",
+        description="PostgresSQL database URL"
+    )
 
     PROJECT_NAME: str = "Policy-to-Evidence-Compliance-Evaluation"
 
