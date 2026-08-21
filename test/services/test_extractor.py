@@ -1,6 +1,8 @@
 import pytest
+from pydantic import JsonValue
 
-from app.core.llm import client
+from app.core.config import settings
+from app.core.llm import get_gemini_client
 from app.models.schema import (
     ComparisonOperator,
     ComplianceStatus,
@@ -64,17 +66,18 @@ def test_clean_json_markdown() -> None:
 
 
 @pytest.mark.anyio
-async def test_llm_client_activation() -> None:
+async def test_gemini_client_activation() -> None:
     """
-    Tests whether the OpenRouter LLM client is activated, authenticated,
-    and responsive using the configured API key.
+    Tests whether the Google Gemini client is activated, authenticated,
+    and responsive using the configured GEMINI_API_KEY.
     """
-    assert client.api_key, "OpenRouter API Key is missing or empty in configuration."
-    assert "openrouter.ai" in str(client.base_url), "Base URL must point to OpenRouter."
+    assert settings.gemini_api_key, "GEMINI_API_KEY is missing or empty in configuration."
+    client = get_gemini_client()
+    assert client is not None, "Gemini client instance is not initialized."
 
-    # Verify model completion works live
-    minimal_policy = "Database servers must operate with CPU utilization below 90%."
-    result: PolicyExtractionPayload = await extract_rules_from_text(minimal_policy)
+    # Live minimal policy extraction check
+    minimal_policy = "Production database servers are required to maintain CPU utilization below 90%."
+    result: PolicyExtractionPayload = await extract_rules_from_text(minimal_policy, provider="gemini")
 
     assert isinstance(result, PolicyExtractionPayload)
     assert len(result.rules) > 0
@@ -89,7 +92,7 @@ async def test_llm_client_activation() -> None:
 @pytest.mark.anyio
 async def test_extract_rules_pdf_capacity_policy_and_evaluation() -> None:
     """
-    Tests live LLM extraction against the exact Flyyy.ai PDF policy snippet
+    Tests live Gemini LLM extraction against the exact Flyyy.ai PDF policy snippet
     and evaluates the extracted rule against the raw platform evidence JSON.
     """
     # 1. Feed unstructured policy paragraph into LLM extractor
@@ -111,10 +114,17 @@ async def test_extract_rules_pdf_capacity_policy_and_evaluation() -> None:
 
     # 4. Evaluate against the raw evidence asset from the problem statement:
     # Asset has CPU utilization = 92% -> Expected Status: Non-Compliant
+    metrics_failing: dict[str, JsonValue] = {
+        cpu_rule.target_metric: 92,
+        "auto_scaling_enabled": True,
+    }
+    if cpu_rule.pre_condition:
+        metrics_failing[cpu_rule.pre_condition.target_metric] = cpu_rule.pre_condition.threshold_value
+
     evidence_failing = EvidenceAsset(
         asset_id="prod-db-server-01",
         asset_type=cpu_rule.target_asset_type,
-        metrics={cpu_rule.target_metric: 92, "auto_scaling_enabled": True},
+        metrics=metrics_failing,
     )
 
     verdict_failing = evaluate_rule(rule=cpu_rule, asset=evidence_failing)
@@ -123,10 +133,17 @@ async def test_extract_rules_pdf_capacity_policy_and_evaluation() -> None:
     assert "85" in verdict_failing.audit_reasoning
 
     # 5. Verify a passing asset with CPU utilization = 70% -> Expected Status: Compliant
+    metrics_passing: dict[str, JsonValue] = {
+        cpu_rule.target_metric: 70,
+        "auto_scaling_enabled": True,
+    }
+    if cpu_rule.pre_condition:
+        metrics_passing[cpu_rule.pre_condition.target_metric] = cpu_rule.pre_condition.threshold_value
+
     evidence_passing = EvidenceAsset(
         asset_id="prod-db-server-02",
         asset_type=cpu_rule.target_asset_type,
-        metrics={cpu_rule.target_metric: 70, "auto_scaling_enabled": True},
+        metrics=metrics_passing,
     )
 
     verdict_passing = evaluate_rule(rule=cpu_rule, asset=evidence_passing)
@@ -145,7 +162,7 @@ async def test_extract_rules_pdf_capacity_policy_and_evaluation() -> None:
 @pytest.mark.anyio
 async def test_extract_rules_storage_encryption_policy_and_evaluation() -> None:
     """
-    Tests live LLM extraction for object storage encryption policy
+    Tests live Gemini LLM extraction for object storage encryption policy
     and evaluates the extracted rule against compliant and non-compliant assets.
     """
     # 1. Extract rules from policy text
@@ -163,20 +180,28 @@ async def test_extract_rules_storage_encryption_policy_and_evaluation() -> None:
     assert enc_rule.operator in (ComparisonOperator.EQ, "==")
 
     # 3. Evaluate against compliant storage asset
+    metrics_compliant: dict[str, JsonValue] = {enc_rule.target_metric: True}
+    if enc_rule.pre_condition:
+        metrics_compliant[enc_rule.pre_condition.target_metric] = enc_rule.pre_condition.threshold_value
+
     storage_compliant = EvidenceAsset(
         asset_id="bucket-01",
         asset_type=enc_rule.target_asset_type,
-        metrics={enc_rule.target_metric: True},
+        metrics=metrics_compliant,
     )
 
     verdict_compliant = evaluate_rule(rule=enc_rule, asset=storage_compliant)
     assert verdict_compliant.status == ComplianceStatus.COMPLIANT
 
     # 4. Evaluate against non-compliant storage asset (encryption disabled)
+    metrics_non_compliant: dict[str, JsonValue] = {enc_rule.target_metric: False}
+    if enc_rule.pre_condition:
+        metrics_non_compliant[enc_rule.pre_condition.target_metric] = enc_rule.pre_condition.threshold_value
+
     storage_non_compliant = EvidenceAsset(
         asset_id="bucket-02",
         asset_type=enc_rule.target_asset_type,
-        metrics={enc_rule.target_metric: False},
+        metrics=metrics_non_compliant,
     )
 
     verdict_non_compliant = evaluate_rule(rule=enc_rule, asset=storage_non_compliant)
@@ -186,7 +211,7 @@ async def test_extract_rules_storage_encryption_policy_and_evaluation() -> None:
 @pytest.mark.anyio
 async def test_extract_rules_conditional_security_policy() -> None:
     """
-    Tests live LLM extraction for conditional / interdependent database security policy.
+    Tests live Gemini LLM extraction for conditional / interdependent database security policy.
     """
     payload: PolicyExtractionPayload = await extract_rules_from_text(POLICY_CONDITIONAL_SECURITY)
 
