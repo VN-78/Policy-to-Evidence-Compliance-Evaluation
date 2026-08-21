@@ -11,6 +11,3 @@ wheels/
 
 # env files
 .env
-
-#docs file 
-docs/
