@@ -10,10 +10,14 @@ import {
   ShieldCheck,
   Loader2,
   Sparkles,
+  UploadCloud,
+  Download,
+  Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { usePolicies, useRunComplianceScan } from "@/api/hooks"
 import type {
@@ -87,19 +91,46 @@ interface ComplianceScanViewProps {
   onSelectPolicy: (policyId: string) => void
 }
 
+type FilterStatus = "all" | "non-compliant" | "compliant"
+
 export function ComplianceScanView({
   selectedPolicyId,
   onSelectPolicy,
 }: ComplianceScanViewProps) {
-  const [evidenceText, setEvidenceText] = React.useState(
-    JSON.stringify(SAMPLE_EVIDENCE_JSON, null, 2)
-  )
+  const [activeInputMode, setActiveInputMode] = React.useState<"editor" | "upload">("editor")
+  const [evidenceText, setEvidenceText] = React.useState("")
+  const [uploadedFileName, setUploadedFileName] = React.useState<string | null>(null)
   const [expandedAssets, setExpandedAssets] = React.useState<Record<string, boolean>>({})
   const [scanResult, setScanResult] = React.useState<ComplianceScanResponse | null>(null)
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = React.useState<FilterStatus>("all")
 
   const { data: policies, isLoading: isLoadingPolicies } = usePolicies()
   const scanMutation = useRunComplianceScan()
+
+  // Real-time JSON validation
+  const jsonValidation = React.useMemo<{
+    isValid: boolean
+    assetCount: number
+    error?: string
+  }>(() => {
+    if (!evidenceText.trim()) {
+      return { isValid: false, assetCount: 0 }
+    }
+    try {
+      const parsed = JSON.parse(evidenceText)
+      if (!parsed.assets || !Array.isArray(parsed.assets)) {
+        return {
+          isValid: false,
+          assetCount: 0,
+          error: "Missing 'assets' array in JSON root",
+        }
+      }
+      return { isValid: true, assetCount: parsed.assets.length }
+    } catch {
+      return { isValid: false, assetCount: 0, error: "Invalid JSON syntax" }
+    }
+  }, [evidenceText])
 
   // Auto-select latest policy if none selected
   React.useEffect(() => {
@@ -115,7 +146,43 @@ export function ComplianceScanView({
     }))
   }
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0]
+      setUploadedFileName(file.name)
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const text = event.target?.result as string
+        setEvidenceText(text)
+        setActiveInputMode("editor")
+        setErrorMessage(null)
+      }
+      reader.readAsText(file)
+    }
+  }
+
+  const handleFileDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0]
+      setUploadedFileName(file.name)
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const text = event.target?.result as string
+        setEvidenceText(text)
+        setActiveInputMode("editor")
+        setErrorMessage(null)
+      }
+      reader.readAsText(file)
+    }
+  }
+
   const handleRunScan = async () => {
+    if (!evidenceText.trim()) {
+      setErrorMessage("Please provide evidence JSON payload to evaluate.")
+      return
+    }
+
     setErrorMessage(null)
     try {
       const parsedEvidence: EvidencePayload = JSON.parse(evidenceText)
@@ -128,7 +195,7 @@ export function ComplianceScanView({
         policyId: selectedPolicyId || undefined,
       })
       setScanResult(result)
-      // Auto-expand all assets with non-compliant status
+      // Auto-expand all assets by default
       const initialExpanded: Record<string, boolean> = {}
       result.asset_results.forEach((asset) => {
         initialExpanded[asset.asset_id] = true
@@ -143,6 +210,15 @@ export function ComplianceScanView({
 
   const loadSampleEvidence = () => {
     setEvidenceText(JSON.stringify(SAMPLE_EVIDENCE_JSON, null, 2))
+    setUploadedFileName("sample-evidence.json")
+    setActiveInputMode("editor")
+    setErrorMessage(null)
+  }
+
+  const clearEvidence = () => {
+    setEvidenceText("")
+    setUploadedFileName(null)
+    setScanResult(null)
     setErrorMessage(null)
   }
 
@@ -156,6 +232,31 @@ export function ComplianceScanView({
     }
   }
 
+  const exportReport = () => {
+    if (!scanResult) return
+    const blob = new Blob([JSON.stringify(scanResult, null, 2)], {
+      type: "application/json",
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `compliance-audit-${scanResult.scan_id}.json`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  // Filtered asset results
+  const filteredAssetResults = React.useMemo(() => {
+    if (!scanResult) return []
+    if (statusFilter === "all") return scanResult.asset_results
+    if (statusFilter === "non-compliant") {
+      return scanResult.asset_results.filter((a) => a.overall_status === "Non-Compliant")
+    }
+    return scanResult.asset_results.filter((a) => a.overall_status === "Compliant")
+  }, [scanResult, statusFilter])
+
   return (
     <div className="space-y-8">
       {/* Page Header */}
@@ -165,12 +266,25 @@ export function ComplianceScanView({
             Compliance Scan Workspace
           </h2>
           <p className="text-sm text-muted-foreground sm:text-base">
-            Ingest live infrastructure telemetry JSON and deterministically evaluate compliance
-            against active policy rules.
+            Upload or paste cloud infrastructure telemetry JSON to deterministically audit against
+            active rules.
           </p>
         </div>
 
+        {/* Toolbar Controls */}
         <div className="flex items-center gap-2">
+          {evidenceText && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearEvidence}
+              className="text-xs text-muted-foreground hover:text-destructive gap-1.5"
+            >
+              <Trash2 className="size-3.5" />
+              Clear
+            </Button>
+          )}
+
           <Button
             variant="outline"
             size="sm"
@@ -184,7 +298,7 @@ export function ComplianceScanView({
         </div>
       </div>
 
-      {/* Error Message */}
+      {/* Error Alert */}
       {errorMessage && (
         <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
           <AlertTriangle className="size-5 shrink-0" />
@@ -192,39 +306,98 @@ export function ComplianceScanView({
         </div>
       )}
 
-      {/* Input Section: Evidence Payload + Policy Selector */}
+      {/* Input Workspace Grid */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* Evidence JSON Editor (8 Cols) */}
+        {/* Evidence JSON Workspace (8 Cols) */}
         <div className="lg:col-span-8">
           <Card className="h-full">
             <CardHeader className="flex flex-row items-center justify-between pb-3">
               <div>
                 <CardTitle className="text-lg">Infrastructure Evidence Payload</CardTitle>
-                <CardDescription>Raw telemetry JSON emitted from cloud monitoring</CardDescription>
+                <CardDescription>
+                  {uploadedFileName ? `File: ${uploadedFileName}` : "Provide JSON telemetry payload"}
+                </CardDescription>
               </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={formatJson}
-                  className="rounded text-xs"
-                >
-                  Format JSON
-                </Button>
+
+              {/* Status & Format Badge */}
+              <div className="flex items-center gap-2">
+                {evidenceText.trim() && (
+                  <Badge
+                    variant={jsonValidation.isValid ? "success" : "destructive"}
+                    className="font-mono text-[10px]"
+                  >
+                    {jsonValidation.isValid
+                      ? `✓ Valid (${jsonValidation.assetCount} Assets)`
+                      : jsonValidation.error || "Invalid JSON"}
+                  </Badge>
+                )}
+
+                {evidenceText.trim() && jsonValidation.isValid && (
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={formatJson}
+                    className="rounded text-xs"
+                  >
+                    Format JSON
+                  </Button>
+                )}
               </div>
             </CardHeader>
+
             <CardContent>
-              <Textarea
-                value={evidenceText}
-                onChange={(e) => setEvidenceText(e.target.value)}
-                placeholder="Paste raw telemetry evidence JSON..."
-                className="h-[280px] font-mono text-xs leading-relaxed bg-muted/20"
-              />
+              <Tabs
+                value={activeInputMode}
+                onValueChange={(val) => setActiveInputMode(val as "editor" | "upload")}
+                className="w-full"
+              >
+                <TabsList className="grid w-full grid-cols-2 mb-3">
+                  <TabsTrigger value="editor">JSON Editor</TabsTrigger>
+                  <TabsTrigger value="upload">Upload JSON File</TabsTrigger>
+                </TabsList>
+
+                {/* Editor Tab */}
+                <TabsContent value="editor">
+                  <Textarea
+                    value={evidenceText}
+                    onChange={(e) => setEvidenceText(e.target.value)}
+                    placeholder={`Paste infrastructure JSON here, e.g.:\n{\n  "scan_id": "scan-prod-01",\n  "environment": "production",\n  "assets": [\n    {\n      "asset_id": "arn:aws:s3:::records",\n      "asset_type": "s3_bucket",\n      "metrics": { "server_side_encryption": true }\n    }\n  ]\n}`}
+                    className="h-[280px] font-mono text-xs leading-relaxed bg-muted/15"
+                  />
+                </TabsContent>
+
+                {/* File Upload Dropzone Tab */}
+                <TabsContent value="upload">
+                  <div
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={handleFileDrop}
+                    onClick={() => document.getElementById("json-file-input")?.click()}
+                    className="group flex h-[280px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-border/80 bg-muted/15 p-8 text-center transition-all hover:border-primary hover:bg-muted/30 cursor-pointer"
+                  >
+                    <input
+                      id="json-file-input"
+                      type="file"
+                      accept=".json,application/json"
+                      onChange={handleFileUpload}
+                      className="hidden"
+                    />
+                    <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary transition-transform group-hover:scale-110 mb-3">
+                      <UploadCloud className="size-6" />
+                    </div>
+                    <h4 className="font-heading text-sm font-semibold text-foreground">
+                      {uploadedFileName || "Drop telemetry .json file here"}
+                    </h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Click to browse or drop standard infrastructure evidence JSON
+                    </p>
+                  </div>
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </div>
 
-        {/* Scan Action & Policy Selector Panel (4 Cols) */}
+        {/* Policy Target Selector & Run Scan Panel (4 Cols) */}
         <div className="lg:col-span-4">
           <Card className="flex h-full flex-col justify-between p-6">
             <div className="space-y-4">
@@ -239,15 +412,15 @@ export function ComplianceScanView({
                   className="mt-2 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm shadow-sm transition-colors focus:border-ring focus:outline-none"
                 >
                   {isLoadingPolicies ? (
-                    <option>Loading policies...</option>
+                    <option>Loading policies from database...</option>
                   ) : policies && policies.length > 0 ? (
                     policies.map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.rule_count} rules)
+                        {p.name} ({p.rule_count} active rules)
                       </option>
                     ))
                   ) : (
-                    <option value="">No policies available (upload one first)</option>
+                    <option value="">No policies available (extract one in Step 1)</option>
                   )}
                 </select>
               </div>
@@ -259,14 +432,14 @@ export function ComplianceScanView({
                 </div>
                 <p>
                   Evaluates arithmetic thresholds, string matching, and conditional requirements
-                  with zero LLM hallucinations during scan time.
+                  with zero LLM hallucinations during scan execution.
                 </p>
               </div>
             </div>
 
             <Button
               onClick={handleRunScan}
-              disabled={scanMutation.isPending || !selectedPolicyId}
+              disabled={scanMutation.isPending || !selectedPolicyId || !evidenceText.trim()}
               className="mt-6 w-full gap-2 rounded-lg py-5 text-sm font-semibold shadow-md"
             >
               {scanMutation.isPending ? (
@@ -285,11 +458,11 @@ export function ComplianceScanView({
         </div>
       </div>
 
-      {/* Results Dashboard Section */}
+      {/* Scan Results Dashboard */}
       {scanResult && (
         <div className="space-y-6 pt-4 border-t border-border/60">
-          {/* Header */}
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          {/* Dashboard Header & Export Action */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h3 className="font-heading text-xl font-bold tracking-tight text-foreground sm:text-2xl">
                 Scan Audit Results
@@ -297,6 +470,18 @@ export function ComplianceScanView({
               <p className="text-xs text-muted-foreground sm:text-sm font-mono">
                 Scan ID: {scanResult.scan_id} • Environment: {scanResult.environment}
               </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportReport}
+                className="gap-2 rounded-lg text-xs font-semibold"
+              >
+                <Download className="size-3.5" />
+                Export Audit Report (JSON)
+              </Button>
             </div>
           </div>
 
@@ -382,149 +567,192 @@ export function ComplianceScanView({
 
           {/* Detailed Asset Table */}
           <Card className="overflow-hidden">
-            <CardHeader className="border-b border-border/60 bg-muted/30 py-4 px-6">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/60 bg-muted/30 py-4 px-6">
               <CardTitle className="text-base">Asset Compliance Details & Evaluation Breakdown</CardTitle>
+
+              {/* Status Filter Pills */}
+              <div className="flex items-center gap-1 bg-background/80 p-1 rounded-lg border border-border/60">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
+                    statusFilter === "all"
+                      ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  All ({scanResult.asset_results.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("non-compliant")}
+                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
+                    statusFilter === "non-compliant"
+                      ? "bg-destructive text-white font-semibold shadow-xs"
+                      : "text-muted-foreground hover:text-destructive"
+                  }`}
+                >
+                  Violations ({scanResult.non_compliant_assets_count})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("compliant")}
+                  className={`px-2.5 py-1 text-xs rounded-md font-medium transition-all ${
+                    statusFilter === "compliant"
+                      ? "bg-emerald-600 text-white font-semibold shadow-xs"
+                      : "text-muted-foreground hover:text-emerald-500"
+                  }`}
+                >
+                  Passed ({scanResult.compliant_assets_count})
+                </button>
+              </div>
             </CardHeader>
 
             <CardContent className="p-0 divide-y divide-border/60">
-              {scanResult.asset_results.map((asset: AssetEvaluationResult) => {
-                const isExpanded = expandedAssets[asset.asset_id]
-                const isAssetCompliant = asset.overall_status === "Compliant"
+              {filteredAssetResults.length === 0 ? (
+                <div className="p-8 text-center text-xs text-muted-foreground">
+                  No assets match the selected filter.
+                </div>
+              ) : (
+                filteredAssetResults.map((asset: AssetEvaluationResult) => {
+                  const isExpanded = expandedAssets[asset.asset_id]
+                  const isAssetCompliant = asset.overall_status === "Compliant"
 
-                return (
-                  <div key={asset.asset_id} className="transition-colors">
-                    {/* Asset Header Row */}
-                    <div
-                      onClick={() => toggleAssetExpand(asset.asset_id)}
-                      className="flex items-center justify-between p-4 px-6 hover:bg-muted/30 cursor-pointer select-none transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-muted-foreground">
-                          {isExpanded ? (
-                            <ChevronDown className="size-4" />
-                          ) : (
-                            <ChevronRight className="size-4" />
-                          )}
-                        </span>
-                        <div className="flex flex-col">
-                          <span className="font-mono text-xs font-semibold text-foreground sm:text-sm">
-                            {asset.asset_id}
+                  return (
+                    <div key={asset.asset_id} className="transition-colors">
+                      {/* Asset Header Row */}
+                      <div
+                        onClick={() => toggleAssetExpand(asset.asset_id)}
+                        className="flex items-center justify-between p-4 px-6 hover:bg-muted/30 cursor-pointer select-none transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-muted-foreground">
+                            {isExpanded ? (
+                              <ChevronDown className="size-4" />
+                            ) : (
+                              <ChevronRight className="size-4" />
+                            )}
                           </span>
-                          <span className="text-[11px] text-muted-foreground">
-                            Category: {asset.asset_type}
-                          </span>
+                          <div className="flex flex-col">
+                            <span className="font-mono text-xs font-semibold text-foreground sm:text-sm">
+                              {asset.asset_id}
+                            </span>
+                            <span className="text-[11px] text-muted-foreground">
+                              Category: {asset.asset_type}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <Badge
+                            variant={isAssetCompliant ? "success" : "destructive"}
+                            className="font-mono text-[11px] font-bold"
+                          >
+                            {asset.overall_status}
+                          </Badge>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3">
-                        <Badge
-                          variant={isAssetCompliant ? "success" : "destructive"}
-                          className="font-mono text-[11px] font-bold"
-                        >
-                          {asset.overall_status}
-                        </Badge>
-                      </div>
-                    </div>
+                      {/* Expandable Checks Details */}
+                      {isExpanded && (
+                        <div className="bg-muted/15 p-6 space-y-4 border-t border-border/40">
+                          <h4 className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                            Evaluated Policy Checks ({asset.checks.length})
+                          </h4>
 
-                    {/* Expandable Checks Details */}
-                    {isExpanded && (
-                      <div className="bg-muted/15 p-6 space-y-4 border-t border-border/40">
-                        <h4 className="font-heading text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Evaluated Policy Checks ({asset.checks.length})
-                        </h4>
-
-                        <div className="space-y-3">
-                          {asset.checks.map((check: RuleEvaluationResult, idx: number) => {
-                            const isCheckPassed = check.status === "Compliant"
-                            return (
-                              <div
-                                key={check.control_id || idx}
-                                className={`rounded-xl border p-4 shadow-sm relative overflow-hidden bg-card ${
-                                  isCheckPassed
-                                    ? "border-emerald-500/20"
-                                    : "border-destructive/30"
-                                }`}
-                              >
+                          <div className="space-y-3">
+                            {asset.checks.map((check: RuleEvaluationResult, idx: number) => {
+                              const isCheckPassed = check.status === "Compliant"
+                              return (
                                 <div
-                                  className={`absolute left-0 top-0 bottom-0 w-1 ${
-                                    isCheckPassed ? "bg-emerald-500" : "bg-destructive"
+                                  key={check.control_id || idx}
+                                  className={`rounded-xl border p-4 shadow-sm relative overflow-hidden bg-card ${
+                                    isCheckPassed
+                                      ? "border-emerald-500/20"
+                                      : "border-destructive/30"
                                   }`}
-                                />
+                                >
+                                  <div
+                                    className={`absolute left-0 top-0 bottom-0 w-1 ${
+                                      isCheckPassed ? "bg-emerald-500" : "bg-destructive"
+                                    }`}
+                                  />
 
-                                <div className="ml-2 space-y-3">
-                                  {/* Check Title & Status */}
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      {isCheckPassed ? (
-                                        <CheckCircle2 className="size-4 text-emerald-500" />
-                                      ) : (
-                                        <XCircle className="size-4 text-destructive" />
-                                      )}
-                                      <span className="font-mono text-xs font-bold text-foreground">
-                                        {check.control_id}
-                                      </span>
-                                      <span className="text-xs text-muted-foreground">
-                                        ({check.target_metric})
-                                      </span>
-                                    </div>
+                                  <div className="ml-2 space-y-3">
+                                    {/* Check Title & Status */}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        {isCheckPassed ? (
+                                          <CheckCircle2 className="size-4 text-emerald-500" />
+                                        ) : (
+                                          <XCircle className="size-4 text-destructive" />
+                                        )}
+                                        <span className="font-mono text-xs font-bold text-foreground">
+                                          {check.control_id}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                          ({check.target_metric})
+                                        </span>
+                                      </div>
 
-                                    <Badge
-                                      variant={isCheckPassed ? "success" : "destructive"}
-                                      className="text-[10px]"
-                                    >
-                                      {check.status}
-                                    </Badge>
-                                  </div>
-
-                                  {/* Metrics Comparison Grid */}
-                                  <div className="grid grid-cols-2 gap-3 text-xs">
-                                    <div className="rounded-lg border border-border/50 bg-muted/30 p-2.5">
-                                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                                        Actual Metric Value
-                                      </span>
-                                      <span
-                                        className={`font-mono font-bold ${
-                                          isCheckPassed
-                                            ? "text-emerald-600 dark:text-emerald-400"
-                                            : "text-destructive"
-                                        }`}
+                                      <Badge
+                                        variant={isCheckPassed ? "success" : "destructive"}
+                                        className="text-[10px]"
                                       >
-                                        {check.actual_value !== undefined && check.actual_value !== null
-                                          ? String(check.actual_value)
-                                          : "null / missing"}
-                                      </span>
+                                        {check.status}
+                                      </Badge>
                                     </div>
 
-                                    <div className="rounded-lg border border-border/50 bg-muted/30 p-2.5">
-                                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                                        Required Policy Threshold
-                                      </span>
-                                      <span className="font-mono font-semibold text-foreground">
-                                        {check.operator} {String(check.threshold_value)}
-                                      </span>
-                                    </div>
-                                  </div>
+                                    {/* Metrics Comparison Grid */}
+                                    <div className="grid grid-cols-2 gap-3 text-xs">
+                                      <div className="rounded-lg border border-border/50 bg-muted/30 p-2.5">
+                                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                                          Actual Metric Value
+                                        </span>
+                                        <span
+                                          className={`font-mono font-bold ${
+                                            isCheckPassed
+                                              ? "text-emerald-600 dark:text-emerald-400"
+                                              : "text-destructive"
+                                          }`}
+                                        >
+                                          {check.actual_value !== undefined && check.actual_value !== null
+                                            ? String(check.actual_value)
+                                            : "null / missing"}
+                                        </span>
+                                      </div>
 
-                                  {/* Audit Reasoning Box */}
-                                  <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-xs leading-relaxed">
-                                    <div className="flex items-center gap-1.5 font-semibold text-foreground mb-1">
-                                      <Gavel className="size-3.5 text-primary" />
-                                      Audit Reasoning:
+                                      <div className="rounded-lg border border-border/50 bg-muted/30 p-2.5">
+                                        <span className="block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                                          Required Policy Threshold
+                                        </span>
+                                        <span className="font-mono font-semibold text-foreground">
+                                          {check.operator} {String(check.threshold_value)}
+                                        </span>
+                                      </div>
                                     </div>
-                                    <p className="text-muted-foreground italic">
-                                      "{check.audit_reasoning}"
-                                    </p>
+
+                                    {/* Audit Reasoning Box */}
+                                    <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-xs leading-relaxed">
+                                      <div className="flex items-center gap-1.5 font-semibold text-foreground mb-1">
+                                        <Gavel className="size-3.5 text-primary" />
+                                        Audit Reasoning:
+                                      </div>
+                                      <p className="text-muted-foreground italic">
+                                        "{check.audit_reasoning}"
+                                      </p>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            )
-                          })}
+                              )
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+                      )}
+                    </div>
+                  )
+                })
+              )}
             </CardContent>
           </Card>
         </div>
