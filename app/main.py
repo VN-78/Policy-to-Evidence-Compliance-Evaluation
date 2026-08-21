@@ -1,34 +1,48 @@
-from fastapi import FastAPI
+from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
 
-from app.api.v1 import v1_router
+from fastapi import FastAPI, status
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+
+from app.api.v1.api import api_router
 from app.core.config import settings
+from app.db.session import engine, init_db
 
 
-# from app.api.v2 import v2_router  # You would import v2 here later
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    # Bootstrap PostgreSQL database tables on startup
+    await init_db()
+    yield
+    # Dispose connection pools on shutdown
+    await engine.dispose()
 
-def create_app() -> FastAPI:
-    """
-    Application factory pattern. 
-    This is best practice for testing and scalability.
-    """
-    app = FastAPI(
-        title=settings.PROJECT_NAME,
-        version="1.0.0",
-        description="My scalable FastAPI backend template."
-    )
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
 
-    # Attach the v1 router to the main app, with a base prefix
-    app.include_router(v1_router, prefix="/api/v1")
-    
-    # If you had v2, you would attach it like this:
-    # app.include_router(v2_router, prefix="/api/v2")
+# Enable CORS for Frontend communication (Vite/React/Svelte)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Restrict in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    return app
+app.include_router(api_router)
 
-# Initialize the application
-app = create_app()
-
-@app.get("/health", tags=["System"])
-def health_check():
-    """Simple health check endpoint."""
-    return {"status": "ok", "version": "1.0.0"}
+@app.get("/health", tags=["Health"], status_code=status.HTTP_200_OK)
+async def healthcheck() -> dict[str, str]:
+    """Ensures database connection pool is active and responding."""
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as exc:
+        return {"status": "unhealthy", "error": str(exc)}
