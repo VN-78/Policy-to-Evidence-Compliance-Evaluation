@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator
 
+from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -14,20 +15,44 @@ from app.db.models import Base
 def _normalize_database_url(raw_url: str) -> str:
     """
     Normalizes PostgreSQL connection strings for asyncpg and cloud providers (Neon/Render).
-    Converts 'postgres://' or 'postgresql://' to 'postgresql+asyncpg://' and
-    translates 'sslmode=require' query parameters to 'ssl=require'.
+    1. Converts 'postgres://' or 'postgresql://' scheme to 'postgresql+asyncpg://'.
+    2. Strips libpq-only parameters not accepted by asyncpg (channel_binding, sslmode, gssencmode, etc.).
+    3. Configures ssl=require if SSL was specified in the original query.
     """
     if not raw_url:
         return ""
-    url = raw_url.strip()
-    if url.startswith("postgres://"):
-        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
-    elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
-        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    url_str = raw_url.strip()
+    if url_str.startswith("postgres://"):
+        url_str = url_str.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url_str.startswith("postgresql://") and not url_str.startswith("postgresql+asyncpg://"):
+        url_str = url_str.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-    if "sslmode=require" in url:
-        url = url.replace("sslmode=require", "ssl=require")
-    return url
+    parsed_url = make_url(url_str)
+    unsupported_keys = {
+        "channel_binding",
+        "sslmode",
+        "gssencmode",
+        "target_session_attrs",
+        "options",
+    }
+
+    query_dict = dict(parsed_url.query)
+    has_ssl = "ssl" in query_dict or query_dict.get("sslmode") in (
+        "require",
+        "verify-ca",
+        "verify-full",
+        "prefer",
+    )
+
+    for key in list(query_dict.keys()):
+        if key in unsupported_keys:
+            del query_dict[key]
+
+    if has_ssl:
+        query_dict["ssl"] = "require"
+
+    cleaned_url = parsed_url._replace(query=query_dict)
+    return cleaned_url.render_as_string(hide_password=False)
 
 
 # create_async_engine with NullPool to prevent event loop connection conflicts in async environments
