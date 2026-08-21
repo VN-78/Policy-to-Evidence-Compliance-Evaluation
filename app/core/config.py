@@ -1,4 +1,5 @@
 from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import ClassVar
@@ -21,10 +22,7 @@ class Settings(BaseSettings):
         default="gemini",
         description="Active LLM provider backend ('gemini' or 'openrouter')",
     )
-    database_url: str = Field(
-        default="",
-        description="PostgresSQL database URL"
-    )
+    database_url: str = Field(default="", description="PostgresSQL database URL")
 
     PROJECT_NAME: str = "Policy-to-Evidence-Compliance-Evaluation"
 
