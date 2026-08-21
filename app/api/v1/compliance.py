@@ -1,7 +1,10 @@
 """
 Handles evidence ingestion and evaluation against persistent database rules.
 """
+
 import uuid
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,11 +23,11 @@ router = APIRouter(prefix="/compliance", tags=["Compliance"])
 )
 async def run_compliance_scan(
     evidence: EvidencePayload,
-    policy_id: uuid.UUID | None = Query(
-        None,
-        description="Optional policy UUID filter. If omitted, audits against all active rules.",
-    ),
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
+    policy_id: Annotated[
+        uuid.UUID | None,
+        Query(description="Optional policy UUID filter. If omitted, audits against all active rules."),
+    ] = None,
 ) -> ComplianceScanResponse:
     orchestrator = ComplianceOrchestrationService(db)
     return await orchestrator.evaluate_evidence(evidence=evidence, policy_id=policy_id)
