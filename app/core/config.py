@@ -7,15 +7,23 @@ from typing_extensions import ClassVar
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 ENV_PATH = ROOT_DIR / ".env"
 
+
 class Settings(BaseSettings):
     openrouter_api_key: str = Field(
-            default="",
-            description="OpenRouter API Key for LLM extraction",
+        default="",
+        description="OpenRouter API Key for LLM extraction",
     )
-    
+    gemini_api_key: str = Field(
+        default="",
+        description="Google Gemini API Key for LLM extraction",
+    )
+    LLM_PROVIDER: str = Field(
+        default="gemini",
+        description="Active LLM provider backend ('gemini' or 'openrouter')",
+    )
+
     PROJECT_NAME: str = "Policy-to-Evidence-Compliance-Evaluation"
 
-    # This tells Pydantic to read from a local .env file
     # Pydantic Settings configuration
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_file=(str(ENV_PATH), ".env"),
@@ -23,6 +31,7 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
 
 # Instantiate it once to be imported anywhere in the app
 settings = Settings()
