@@ -1,0 +1,71 @@
+{
+  "scan_id": "audit-scan-2026-08-prod-01",
+  "account_id": "123456789012",
+  "environment": "production",
+  "timestamp": "2026-08-21T15:00:00Z",
+  "assets": [
+    {
+      "asset_id": "arn:aws:s3:::acme-customer-records-prod",
+      "asset_type": "s3_bucket",
+      "region": "ap-south-1",
+      "metrics": {
+        "classification": "regulated_data",
+        "server_side_encryption": true,
+        "block_public_access": true,
+        "versioning_status": "Enabled"
+      }
+    },
+    {
+      "asset_id": "arn:aws:s3:::acme-public-assets-static",
+      "asset_type": "s3_bucket",
+      "region": "ap-south-1",
+      "metrics": {
+        "classification": "public_static",
+        "server_side_encryption": true,
+        "block_public_access": false,
+        "versioning_status": "Suspended"
+      }
+    },
+    {
+      "asset_id": "arn:aws:rds:ap-south-1:123456789012:db:acme-core-postgres-prod",
+      "asset_type": "rds_instance",
+      "region": "ap-south-1",
+      "metrics": {
+        "environment": "production",
+        "storage_encrypted": true,
+        "multi_az": true,
+        "backup_retention_days": 14
+      }
+    },
+    {
+      "asset_id": "arn:aws:rds:ap-south-1:123456789012:db:acme-analytics-dev",
+      "asset_type": "rds_instance",
+      "region": "ap-south-1",
+      "metrics": {
+        "environment": "staging",
+        "storage_encrypted": true,
+        "multi_az": false,
+        "backup_retention_days": 3
+      }
+    },
+    {
+      "asset_id": "i-0a1b2c3d4e5f67890",
+      "asset_type": "ec2_instance",
+      "region": "ap-south-1",
+      "metrics": {
+        "instance_name": "payment-api-worker-01",
+        "cpu_utilization": 64.2,
+        "http_tokens": "required"
+      }
+    },
+    {
+      "asset_id": "i-098765fedcba43210",
+      "asset_type": "ec2_instance",
+      "region": "ap-south-1",
+      "metrics": {
+        "instance_name": "legacy-report-generator",
+        "cpu_utilization": 91.8
+      }
+    }
+  ]
+}
