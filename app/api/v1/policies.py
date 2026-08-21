@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 from pypdf import PdfReader
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,7 +16,6 @@ from app.db.session import get_db
 from app.models.schema import (
     ComparisonOperator,
     ExtractedRuleBase,
-    JsonValue,
     PolicyIngestionResponse,
     PreCondition,
 )
@@ -48,9 +47,7 @@ def _extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
     """Extracts raw text pages from an uploaded PDF stream."""
     try:
         reader = PdfReader(io.BytesIO(pdf_bytes))
-        extracted_pages = [
-            page.extract_text() for page in reader.pages if page.extract_text()
-        ]
+        extracted_pages = [page.extract_text() for page in reader.pages if page.extract_text()]
         full_text = "\n".join(extracted_pages).strip()
         if not full_text:
             raise ValueError("No extractable text found in PDF.")
@@ -70,7 +67,7 @@ def _extract_text_from_pdf_bytes(pdf_bytes: bytes) -> str:
 )
 async def upload_policy_pdf(
     file: Annotated[UploadFile, File(description="Policy PDF document")],
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PolicyIngestionResponse:
     if file.content_type not in ("application/pdf", "application/octet-stream"):
         raise HTTPException(
@@ -83,9 +80,7 @@ async def upload_policy_pdf(
 
     fallback_title = file.filename.rsplit(".", 1)[0] if file.filename else None
     orchestrator = ComplianceOrchestrationService(db)
-    return await orchestrator.ingest_policy_document(
-        document_text=raw_text, fallback_title=fallback_title
-    )
+    return await orchestrator.ingest_policy_document(document_text=raw_text, fallback_title=fallback_title)
 
 
 @router.post(
@@ -96,12 +91,10 @@ async def upload_policy_pdf(
 )
 async def extract_policy_from_text(
     payload: PolicyTextRequest,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PolicyIngestionResponse:
     orchestrator = ComplianceOrchestrationService(db)
-    return await orchestrator.ingest_policy_document(
-        document_text=payload.raw_text, fallback_title=payload.policy_name
-    )
+    return await orchestrator.ingest_policy_document(document_text=payload.raw_text, fallback_title=payload.policy_name)
 
 
 @router.get(
@@ -110,7 +103,9 @@ async def extract_policy_from_text(
     status_code=status.HTTP_200_OK,
     summary="List all policies for selection dropdown",
 )
-async def list_policies(db: AsyncSession = Depends(get_db)) -> list[PolicyListItem]:
+async def list_policies(
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> list[PolicyListItem]:
     repo = PolicyRepository(db)
     policies = await repo.list_policies_summary()
     return [PolicyListItem.model_validate(p) for p in policies]
@@ -124,7 +119,7 @@ async def list_policies(db: AsyncSession = Depends(get_db)) -> list[PolicyListIt
 )
 async def get_policy_details(
     policy_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db),
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PolicyDetailResponse:
     repo = PolicyRepository(db)
     policy = await repo.get_policy_by_id(policy_id=policy_id)
@@ -141,11 +136,7 @@ async def get_policy_details(
             target_metric = r.pre_condition.get("target_metric")
             op_val = r.pre_condition.get("operator")
             thresh_val = r.pre_condition.get("threshold_value")
-            if (
-                isinstance(target_metric, str)
-                and isinstance(op_val, str)
-                and thresh_val is not None
-            ):
+            if isinstance(target_metric, str) and isinstance(op_val, str) and thresh_val is not None:
                 pre_cond = PreCondition(
                     target_metric=target_metric,
                     operator=ComparisonOperator(op_val),
@@ -159,7 +150,7 @@ async def get_policy_details(
                 target_asset_type=r.target_asset_type,
                 target_metric=r.target_metric,
                 operator=ComparisonOperator(r.operator),
-                threshold_value=cast(JsonValue, r.threshold_value),
+                threshold_value=r.threshold_value,
                 source_clause=r.source_clause,
                 page_number=r.page_number,
                 pre_condition=pre_cond,
