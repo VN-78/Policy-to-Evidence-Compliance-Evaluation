@@ -1,44 +1,40 @@
-# Test Suite (`test/`)
+# Automated Test Suites (`test/`)
 
-This directory contains automated unit and integration tests for the FastAPI application. The test suite uses **`pytest`** to ensure code reliability and contract adherence.
+This directory contains automated unit, integration, and end-to-end regression tests verifying all components of the compliance evaluation platform.
 
-## 📁 Directory Structure
+---
+
+## 📁 Test Organization
 
 ```text
 test/
 ├── api/
-│   ├── README.md       # API-specific test documentation
-│   └── test_v1.py      # Integration tests for v1 endpoints
-└── README.md           # This file
+│   └── test_v1.py              # End-to-end API route tests using docs/ sample files
+├── db/
+│   └── test_session.py         # PostgreSQL schema bootstrapping and repository tests
+└── services/
+    ├── test_compliance_service.py # Orchestration pipeline & deduplication caching tests
+    ├── test_evaluation.py         # Deterministic mathematical operator unit tests
+    └── test_extractor.py          # Gemini AI extraction and markdown parsing tests
 ```
+
+---
+
+## 🧪 Test Suites Breakdown
+
+| Suite | File | Coverage |
+| :--- | :--- | :--- |
+| **API Endpoints** | [`test/api/test_v1.py`](file:///home/vn-78/Projects/code/Policy-to-Evidence-Compliance-Evaluation/test/api/test_v1.py) | `/health`, `/upload-pdf` with `docs/sample-policy-1.pdf`, SHA-256 deduplication cache hit, `/policies` dropdown list, `/policies/{id}/rules` inspection, `/compliance/scan` with `docs/sample-evidence-1.json`. |
+| **Database Layer** | [`test/db/test_session.py`](file:///home/vn-78/Projects/code/Policy-to-Evidence-Compliance-Evaluation/test/db/test_session.py) | PostgreSQL `init_db()` table creation, `PolicyRepository` CRUD operations, and `content_hash` lookups. |
+| **Compliance Orchestration** | [`test/services/test_compliance_service.py`](file:///home/vn-78/Projects/code/Policy-to-Evidence-Compliance-Evaluation/test/services/test_compliance_service.py) | Full orchestration pipeline from PDF ingestion to evidence evaluation and deduplication. |
+| **Deterministic Evaluator** | [`test/services/test_evaluation.py`](file:///home/vn-78/Projects/code/Policy-to-Evidence-Compliance-Evaluation/test/services/test_evaluation.py) | All comparison operators (`<`, `<=`, `>`, `>=`, `==`, `!=`, `in`, `not_in`), missing metrics (`UNKNOWN`), asset mismatches (`NOT_APPLICABLE`), and pre-condition triggers. |
+| **AI Extractor** | [`test/services/test_extractor.py`](file:///home/vn-78/Projects/code/Policy-to-Evidence-Compliance-Evaluation/test/services/test_extractor.py) | Google Gemini API activation, markdown fence cleaner, live Flyyy.ai PDF policy extraction, and multi-clause rules. |
+
+---
 
 ## 🚀 Running Tests
 
-All commands should be executed from the root of the workspace using `uv run`.
-
-### Run All Tests
-```bash
-uv run pytest
-```
-
-### Run in Verbose Mode (lists each test name and outcome)
+Run the full test suite with `uv`:
 ```bash
 uv run pytest -v
 ```
-
-### Run Tests in a Specific File
-```bash
-uv run pytest test/api/test_v1.py
-```
-
-### Run Tests and View Print/StdOut Statements (`-s`)
-```bash
-uv run pytest -s
-```
-
-## 🛠️ Guidelines for Writing Tests
-
-1. **Discovery Patterns**: `pytest` looks for files matching `test_*.py` or `*_test.py`, and functions prefixed with `test_`. Follow this naming convention strictly to ensure tests are discovered.
-2. **Use `TestClient` for API Tests**: Import `TestClient` from `fastapi.testclient` and pass the FastAPI app instance to mock API requests. This handles routing and schema validation without needing a running server process.
-3. **Database Test Isolation**: For tests requiring a database connection, use a dedicated test database (e.g. SQLite in-memory or a separate PostgreSQL container) and override dependencies using `app.dependency_overrides`.
-4. **Mocking External Services**: Mock third-party APIs (like OpenAI, Stripe, etc.) or complex calculations using `unittest.mock` or pytest fixtures to keep tests fast, reliable, and offline-compatible.
