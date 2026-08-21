@@ -12,7 +12,7 @@ class Base(DeclarativeBase):
 
 
 class PolicyModel(Base):
-    __tablename__ = "policies"
+    __tablename__: str = "policies"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -27,7 +27,7 @@ class PolicyModel(Base):
 
 
 class RuleModel(Base):
-    __tablename__ = "rules"
+    __tablename__: str = "rules"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     policy_id: Mapped[uuid.UUID] = mapped_column(
