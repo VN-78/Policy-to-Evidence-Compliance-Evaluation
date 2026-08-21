@@ -22,6 +22,8 @@ from app.services.extractor import extract_rules_from_text
 
 
 class ComplianceOrchestrationService:
+    repo:PolicyRepository
+
     def __init__(self, session: AsyncSession):
         self.repo = PolicyRepository(session)
 
@@ -60,7 +62,7 @@ class ComplianceOrchestrationService:
                         target_asset_type=str(r.target_asset_type),
                         target_metric=str(r.target_metric),
                         operator=ComparisonOperator(str(r.operator)),
-                        threshold_value=cast(JsonValue, r.threshold_value),
+                        threshold_value=r.threshold_value,
                         source_clause=str(r.source_clause),
                         page_number=r.page_number,
                         pre_condition=pre_cond,
@@ -123,7 +125,7 @@ class ComplianceOrchestrationService:
                     target_asset_type=str(r.target_asset_type),
                     target_metric=str(r.target_metric),
                     operator=ComparisonOperator(str(r.operator)),
-                    threshold_value=cast(JsonValue, r.threshold_value),
+                    threshold_value=r.threshold_value,
                     source_clause=str(r.source_clause),
                     page_number=r.page_number,
                     pre_condition=pre_cond,
