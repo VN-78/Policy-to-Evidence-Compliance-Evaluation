@@ -34,9 +34,8 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PORT=8000
 
-# Copy application source code and sample test documents
+# Copy application source code
 COPY app /app/app
-COPY docs /app/docs
 
 # Expose default HTTP port (Render overrides with $PORT at runtime)
 EXPOSE 8000
