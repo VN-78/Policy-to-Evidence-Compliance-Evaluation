@@ -2,6 +2,7 @@ import hashlib
 import uuid
 from typing import cast
 
+from pydantic import JsonValue
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schema import (
@@ -11,7 +12,6 @@ from app.models.schema import (
     ComplianceStatus,
     EvidencePayload,
     ExtractedRuleBase,
-    JsonValue,
     PolicyIngestionResponse,
     PreCondition,
     RuleEvaluationResult,
@@ -46,11 +46,7 @@ class ComplianceOrchestrationService:
                     t_metric = r.pre_condition.get("target_metric")
                     op_val = r.pre_condition.get("operator")
                     t_val = r.pre_condition.get("threshold_value")
-                    if (
-                        isinstance(t_metric, str)
-                        and isinstance(op_val, str)
-                        and t_val is not None
-                    ):
+                    if isinstance(t_metric, str) and isinstance(op_val, str) and t_val is not None:
                         pre_cond = PreCondition(
                             target_metric=t_metric,
                             operator=ComparisonOperator(op_val),
@@ -113,11 +109,7 @@ class ComplianceOrchestrationService:
                 op_val = r.pre_condition.get("operator")
                 thresh_val = r.pre_condition.get("threshold_value")
 
-                if (
-                    isinstance(target_metric, str)
-                    and isinstance(op_val, str)
-                    and thresh_val is not None
-                ):
+                if isinstance(target_metric, str) and isinstance(op_val, str) and thresh_val is not None:
                     pre_cond = PreCondition(
                         target_metric=target_metric,
                         operator=ComparisonOperator(op_val),
@@ -153,11 +145,7 @@ class ComplianceOrchestrationService:
                 if eval_res.status == ComplianceStatus.NON_COMPLIANT:
                     asset_is_compliant = False
 
-            overall_asset_status = (
-                ComplianceStatus.COMPLIANT
-                if asset_is_compliant
-                else ComplianceStatus.NON_COMPLIANT
-            )
+            overall_asset_status = ComplianceStatus.COMPLIANT if asset_is_compliant else ComplianceStatus.NON_COMPLIANT
 
             if asset_is_compliant:
                 compliant_assets_count += 1
@@ -174,9 +162,7 @@ class ComplianceOrchestrationService:
             )
 
         overall_scan_status = (
-            ComplianceStatus.COMPLIANT
-            if non_compliant_assets_count == 0
-            else ComplianceStatus.NON_COMPLIANT
+            ComplianceStatus.COMPLIANT if non_compliant_assets_count == 0 else ComplianceStatus.NON_COMPLIANT
         )
 
         return ComplianceScanResponse(
