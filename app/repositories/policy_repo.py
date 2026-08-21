@@ -1,4 +1,6 @@
 import uuid
+from collections.abc import Sequence
+from datetime import datetime
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +11,8 @@ from app.models.schema import PolicyExtractionPayload
 
 
 class PolicyRepository:
+    session: AsyncSession
+
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -25,11 +29,7 @@ class PolicyRepository:
 
     async def get_policy_by_id(self, policy_id: uuid.UUID) -> PolicyModel | None:
         """Fetches a single policy with rules preloaded."""
-        stmt = (
-            select(PolicyModel)
-            .options(selectinload(PolicyModel.rules))
-            .where(PolicyModel.id == policy_id)
-        )
+        stmt = select(PolicyModel).options(selectinload(PolicyModel.rules)).where(PolicyModel.id == policy_id)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -50,9 +50,7 @@ class PolicyRepository:
 
         for rule_data in payload.rules:
             operator_str: str = (
-                rule_data.operator.value
-                if hasattr(rule_data.operator, "value")
-                else str(rule_data.operator)
+                rule_data.operator.value if hasattr(rule_data.operator, "value") else str(rule_data.operator)
             )
             rule_model = RuleModel(
                 policy_id=policy.id,
@@ -64,11 +62,7 @@ class PolicyRepository:
                 threshold_value=rule_data.threshold_value,
                 source_clause=rule_data.source_clause,
                 page_number=rule_data.page_number,
-                pre_condition=(
-                    rule_data.pre_condition.model_dump()
-                    if rule_data.pre_condition
-                    else None
-                ),
+                pre_condition=(rule_data.pre_condition.model_dump() if rule_data.pre_condition else None),
             )
             self.session.add(rule_model)
 
@@ -100,15 +94,15 @@ class PolicyRepository:
             .order_by(PolicyModel.created_at.desc())
         )
         result = await self.session.execute(stmt)
-        rows = result.all()
+        rows: Sequence[tuple[uuid.UUID, str, datetime, int]] = result.tuples().all()
         return [
             {
-                "id": row.id,
-                "name": row.name,
-                "created_at": row.created_at,
-                "rule_count": row.rule_count,
+                "id": p_id,
+                "name": p_name,
+                "created_at": p_created_at,
+                "rule_count": p_rule_count,
             }
-            for row in rows
+            for p_id, p_name, p_created_at, p_rule_count in rows
         ]
 
     async def get_policy_rules(self, policy_id: uuid.UUID) -> list[RuleModel]:
