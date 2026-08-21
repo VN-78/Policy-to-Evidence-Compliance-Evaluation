@@ -1,5 +1,5 @@
 # region imports
-
+import uuid
 from enum import Enum
 from typing import ClassVar
 
@@ -114,6 +114,18 @@ class PolicyExtractionPayload(BaseModel):
         description="List of machine-evaluatable rules extracted from the policy",
     )
 
+class PolicyIngestionResponse(BaseModel):
+    """Response returned after extracting and persisting a policy to PostgreSQL."""
+
+    policy_id: uuid.UUID = Field(
+        ..., description="Persistent UUID of the policy in the database"
+    )
+    policy_name: str = Field(
+        ..., description="Extracted name or title of the policy"
+    )
+    rules: list[ExtractedRuleBase] = Field(
+        default_factory=list, description="List of extracted structured rules"
+    )
 
 class RuleResponse(ExtractedRuleBase):
     """Schema returned to React UI for Screen 1 Preview."""
